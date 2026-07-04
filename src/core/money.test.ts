@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { bahtToSatang, fmt, fmtBaht, parseAmount } from "./money";
+import {
+  bahtToSatang,
+  fmt,
+  fmtBaht,
+  fmtSigned,
+  parseAmount,
+  satangToBaht,
+} from "./money";
 
 describe("parseAmount", () => {
   it("ตัวเลขปกติ", () => {
@@ -36,5 +43,16 @@ describe("bahtToSatang — การปัดเศษ", () => {
   it("ปัดเป็นสตางค์ที่ใกล้ที่สุด (Math.round): 12.345 → 1235", () => {
     expect(bahtToSatang(12.345)).toBe(1_235);
     expect(bahtToSatang(12.344)).toBe(1_234);
+  });
+});
+
+describe("satangToBaht / fmtSigned", () => {
+  it("satangToBaht: สตางค์ → บาท (เลขทศนิยม)", () => {
+    expect(satangToBaht(125_050)).toBe(1250.5);
+    expect(satangToBaht(0)).toBe(0);
+  });
+  it("fmtSigned: เครื่องหมายนำหน้าตามทิศทาง in/out", () => {
+    expect(fmtSigned(125_000, "in")).toBe("+฿1,250");
+    expect(fmtSigned(125_050, "out")).toBe("−฿1,250.50");
   });
 });
