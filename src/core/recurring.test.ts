@@ -101,9 +101,15 @@ describe("dueDates — weekly", () => {
   });
 
   it("B2: weekly ที่ day นอกช่วง 0–6 (เช่น 25) → ว่าง ไม่ loop ไม่จบ", () => {
-    // getDay() คืน 0–6 เสมอ → ไม่มีวันไหน === 25 แต่ cur เพิ่มทีละวันจนเกิน today → []
+    // guard ใน recurring.ts คืน [] ทันทีเมื่อ day ไม่ใช่ int 0–6 (getDay() คืน 0–6 เสมอ)
     expect(
       dueDates({ freq: "weekly", day: 25, since: "2026-06-01" }, "2026-06-16"),
+    ).toEqual([]);
+  });
+
+  it("weekly ที่ since parse ไม่ได้ → ว่าง ไม่ loop ไม่จบ", () => {
+    expect(
+      dueDates({ freq: "weekly", day: 1, since: "not-a-date" }, "2026-06-16"),
     ).toEqual([]);
   });
 });
@@ -166,6 +172,11 @@ describe("nextOccurrence — weekly/yearly", () => {
     expect(
       nextOccurrence({ freq: "weekly", day: 5, since: "2026-01-01" }, "2026-06-11"),
     ).toBe("2026-06-12");
+  });
+  it("weekly ที่ day นอกช่วง 0–6 → คืน today เป็น fallback ไม่ loop ไม่จบ", () => {
+    expect(
+      nextOccurrence({ freq: "weekly", day: 25, since: "2026-01-01" }, "2026-06-11"),
+    ).toBe("2026-06-11");
   });
   it("yearly: ปีนี้ถ้ายังไม่ถึง ไม่งั้นปีหน้า", () => {
     expect(

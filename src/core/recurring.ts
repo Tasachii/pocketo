@@ -54,7 +54,10 @@ export function dueDates(rule: RecurringWindow, today: string): string[] {
   const freq = rule.freq ?? "monthly";
 
   if (freq === "weekly") {
+    // getDay() คืน 0–6 เท่านั้น — day นอกช่วงนี้ไม่มีวันตรง วนไม่รู้จบ (กันข้อมูลนำเข้าเสีย)
+    if (!Number.isInteger(rule.day) || rule.day < 0 || rule.day > 6) return out;
     const cur = new Date(`${b.lower}T00:00:00`);
+    if (Number.isNaN(cur.getTime())) return out; // b.lower parse ไม่ได้ → กันวนไม่รู้จบ
     while (cur.getDay() !== rule.day) cur.setDate(cur.getDate() + 1);
     let d = isoOf(cur);
     while (d <= today) {
@@ -97,7 +100,10 @@ export function nextOccurrence(rule: RecurringWindow, today: string): string {
   const freq = rule.freq ?? "monthly";
 
   if (freq === "weekly") {
+    // day นอกช่วง 0–6 หรือ today ที่ parse ไม่ได้ → ไม่วน คืน today เป็น fallback ปลอดภัย
+    if (!Number.isInteger(rule.day) || rule.day < 0 || rule.day > 6) return today;
     const cur = new Date(`${today}T00:00:00`);
+    if (Number.isNaN(cur.getTime())) return today;
     cur.setDate(cur.getDate() + 1);
     while (cur.getDay() !== rule.day) cur.setDate(cur.getDate() + 1);
     return isoOf(cur);
