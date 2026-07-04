@@ -65,6 +65,10 @@ async function createAutoAllocations(
   const rules = pockets
     .filter((p) => !p.isMain && (p.allocPercent ?? 0) > 0)
     .map((p) => ({ pocketId: p.id!, percent: p.allocPercent! }));
+  // UI คุมผลรวม ≤ 100 อยู่แล้ว (PocketDialog) — แต่ถ้าข้อมูลนำเข้าเสียจนเกิน 100
+  // ข้ามการแบ่งอัตโนมัติ (เงินคงอยู่กล่องหลัก) แทนที่จะให้ splitByPercent throw
+  // แล้ว rollback การบันทึกรายรับทั้งก้อน / ทำแอพค้างตอนเปิด (applyDueRecurring)
+  if (rules.reduce((s, r) => s + r.percent, 0) > 100) return;
   const createdAt = Date.now();
   for (const a of splitByPercent(amount, rules)) {
     await db.tx.add({

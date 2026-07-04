@@ -1,6 +1,6 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Pocket, Tx } from "../core/types";
+import type { Category, Pocket, Tx } from "../core/types";
 import { PocketoDB, seedIfEmpty } from "./db";
 
 // calcBalances เป็น pure function — เทสต์ได้โดยไม่ต้องแตะ DB
@@ -16,7 +16,7 @@ vi.mock("./db", async (importOriginal) => {
   };
 });
 
-const { calcBalances, transfer } = await import("./data");
+const { calcBalances, transfer, saveQuickTx, monthKey } = await import("./data");
 
 // helper สร้าง pocket/tx แบบสั้น
 const pkt = (id: number): Pocket => ({
@@ -182,5 +182,66 @@ describe("transfer", () => {
       transfer(mainId, savingsId, 9_999_999, "2026-06-03"),
     ).rejects.toThrow("ยอดในกล่องต้นทางไม่พอ");
     expect(await testDb.tx.count()).toBe(0);
+  });
+});
+
+describe("monthKey", () => {
+  it("ปี + เดือน (0-indexed) → 'YYYY-MM' เดือน 1-indexed เติมศูนย์", () => {
+    expect(monthKey(2026, 0)).toBe("2026-01");
+    expect(monthKey(2026, 11)).toBe("2026-12");
+  });
+});
+
+describe("seedIfEmpty — มีข้อมูลอยู่แล้วแต่ยังไม่เคยตั้ง flag seeded", () => {
+  let n = 0;
+  it("กล่อง/หมวดมีอยู่แล้ว → ข้าม count===0 ไม่ seed ทับ แต่ตั้ง flag", async () => {
+    const dbx = new PocketoDB(`seed-existing-${++n}`);
+    await dbx.pockets.add({ name: "x", icon: "💰", isMain: 1, sortOrder: 0 } as Pocket);
+    await dbx.categories.add({
+      name: "c",
+      icon: "🍜",
+      type: "expense",
+      sortOrder: 0,
+    } as Category);
+    await seedIfEmpty(dbx);
+    expect(await dbx.pockets.count()).toBe(1);
+    expect(await dbx.categories.count()).toBe(1);
+    expect((await dbx.kv.get("seeded"))?.value).toBe(1);
+  });
+});
+
+describe("saveQuickTx — auto-allocation guards", () => {
+  let n = 0;
+
+  it("รวม % เกิน 100 (ข้อมูลนำเข้าเสีย) → บันทึกรายรับได้ ไม่ throw และไม่มี TRANSFER", async () => {
+    testDb = new PocketoDB(`alloc-guard-${++n}`);
+    await seedIfEmpty(testDb);
+    const mainId = (await testDb.pockets.toArray()).find((p) => p.isMain)!.id!;
+    await testDb.pockets.bulkAdd([
+      { name: "a", icon: "💰", isMain: 0, sortOrder: 1, allocPercent: 70 },
+      { name: "b", icon: "💰", isMain: 0, sortOrder: 2, allocPercent: 60 },
+    ] as Pocket[]);
+    await expect(
+      saveQuickTx({ type: "IN", amount: 100_000, pocketId: mainId, date: "2026-06-01" }),
+    ).resolves.toBeUndefined();
+    const rows = await testDb.tx.toArray();
+    expect(rows.filter((t) => t.type === "TRANSFER")).toHaveLength(0);
+    expect(rows.filter((t) => t.type === "IN")).toHaveLength(1);
+  });
+
+  it("รายรับเข้ากล่องที่ไม่ใช่กล่องหลัก → ไม่แบ่งอัตโนมัติ (early-return)", async () => {
+    testDb = new PocketoDB(`alloc-nonmain-${++n}`);
+    await seedIfEmpty(testDb);
+    const savingsId = (await testDb.pockets.add({
+      name: "s",
+      icon: "💰",
+      isMain: 0,
+      sortOrder: 1,
+      allocPercent: 20,
+    })) as number;
+    await saveQuickTx({ type: "IN", amount: 100_000, pocketId: savingsId, date: "2026-06-01" });
+    const rows = await testDb.tx.toArray();
+    expect(rows.filter((t) => t.type === "TRANSFER")).toHaveLength(0);
+    expect(rows).toHaveLength(1);
   });
 });

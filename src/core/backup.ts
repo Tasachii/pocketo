@@ -55,16 +55,91 @@ export async function downloadBackup(
   await db.kv.put({ key: "lastExport", value: Date.now() });
 }
 
+const isNum = (v: unknown): v is number =>
+  typeof v === "number" && Number.isFinite(v);
+const isStr = (v: unknown): v is string => typeof v === "string";
+const isObj = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null;
+
+/** YYYY-MM-DD ที่ parse เป็นวันจริงได้ — วันเสียทำให้ engine รายการประจำวนไม่รู้จบ */
+function isISODate(v: unknown): v is string {
+  if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  return !Number.isNaN(new Date(`${v}T00:00:00`).getTime());
+}
+
+const TX_TYPES = new Set(["IN", "OUT", "TRANSFER", "INIT"]);
+const FREQS = new Set(["monthly", "weekly", "yearly"]);
+
+function isValidTx(v: unknown): boolean {
+  return (
+    isObj(v) &&
+    TX_TYPES.has(v.type as string) &&
+    isNum(v.amount) &&
+    isNum(v.pocketId) &&
+    isISODate(v.date) &&
+    isNum(v.createdAt)
+  );
+}
+
+function isValidPocket(v: unknown): boolean {
+  return (
+    isObj(v) &&
+    isStr(v.name) &&
+    isStr(v.icon) &&
+    (v.isMain === 0 || v.isMain === 1) &&
+    isNum(v.sortOrder) &&
+    (v.allocPercent === undefined ||
+      (isNum(v.allocPercent) && v.allocPercent >= 0 && v.allocPercent <= 100))
+  );
+}
+
+function isValidCategory(v: unknown): boolean {
+  return (
+    isObj(v) &&
+    isStr(v.name) &&
+    isStr(v.icon) &&
+    (v.type === "income" || v.type === "expense") &&
+    isNum(v.sortOrder)
+  );
+}
+
+/** weekly ต้องมี day เป็น int 0–6 ไม่งั้น engine วนไม่รู้จบตอนเปิดแอพ (ดู core/recurring) */
+function isValidRecurring(v: unknown): boolean {
+  if (!isObj(v)) return false;
+  const freq = v.freq === undefined ? "monthly" : v.freq;
+  if (!FREQS.has(freq as string) || !isNum(v.day)) return false;
+  if (freq === "weekly" && (!Number.isInteger(v.day) || v.day < 0 || v.day > 6))
+    return false;
+  return (
+    (v.type === "IN" || v.type === "OUT") &&
+    isNum(v.amount) &&
+    isNum(v.pocketId) &&
+    isISODate(v.since) &&
+    (v.lastPosted === undefined || isISODate(v.lastPosted)) &&
+    (v.active === 0 || v.active === 1) &&
+    isNum(v.createdAt)
+  );
+}
+
 export function validateBackup(data: unknown): data is BackupFile {
   if (typeof data !== "object" || data === null) return false;
   const d = data as Record<string, unknown>;
+  if (
+    d.app !== "pocketo" ||
+    !(d.schemaVersion === 1 || d.schemaVersion === 2) ||
+    !Array.isArray(d.pockets) ||
+    !Array.isArray(d.categories) ||
+    !Array.isArray(d.tx) ||
+    !(d.recurring === undefined || Array.isArray(d.recurring))
+  ) {
+    return false;
+  }
+  // ตรวจรูปทุกระเบียน — ไฟล์เสีย/แก้มือต้อง fail สะอาด ไม่ใช่ทำแอพค้างหรือยอดเพี้ยน
   return (
-    d.app === "pocketo" &&
-    (d.schemaVersion === 1 || d.schemaVersion === 2) &&
-    Array.isArray(d.pockets) &&
-    Array.isArray(d.categories) &&
-    Array.isArray(d.tx) &&
-    (d.recurring === undefined || Array.isArray(d.recurring))
+    d.pockets.every(isValidPocket) &&
+    d.categories.every(isValidCategory) &&
+    d.tx.every(isValidTx) &&
+    (d.recurring === undefined || d.recurring.every(isValidRecurring))
   );
 }
 

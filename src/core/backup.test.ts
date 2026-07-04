@@ -111,6 +111,71 @@ describe("backup round-trip", () => {
   });
 });
 
+describe("validateBackup — ระเบียนเสียต้อง reject สะอาด", () => {
+  const valid = {
+    app: "pocketo",
+    schemaVersion: 2 as const,
+    exportedAt: "2026-06-01T00:00:00.000Z",
+    pockets: [{ name: "หลัก", icon: "👛", isMain: 1, sortOrder: 0 }],
+    categories: [{ name: "อาหาร", icon: "🍜", type: "expense", sortOrder: 0 }],
+    tx: [
+      { type: "OUT", amount: 100, pocketId: 1, date: "2026-06-01", createdAt: 1 },
+    ],
+    recurring: [] as unknown[],
+  };
+
+  it("ไฟล์รูปครบถูกต้อง → true", () => {
+    expect(validateBackup(valid)).toBe(true);
+  });
+
+  it("tx.amount ไม่ใช่ตัวเลข → false", () => {
+    expect(
+      validateBackup({
+        ...valid,
+        tx: [{ type: "OUT", amount: "100", pocketId: 1, date: "2026-06-01", createdAt: 1 }],
+      }),
+    ).toBe(false);
+  });
+
+  it("tx.date เป็นวันปฏิทินที่ไม่มีจริง → false", () => {
+    expect(
+      validateBackup({
+        ...valid,
+        tx: [{ type: "OUT", amount: 100, pocketId: 1, date: "2026-13-40", createdAt: 1 }],
+      }),
+    ).toBe(false);
+  });
+
+  it("pocket.allocPercent เกิน 100 → false", () => {
+    expect(
+      validateBackup({
+        ...valid,
+        pockets: [{ name: "x", icon: "💰", isMain: 0, sortOrder: 0, allocPercent: 150 }],
+      }),
+    ).toBe(false);
+  });
+
+  it("recurring weekly ที่ day นอกช่วง 0–6 → false (กัน engine วนไม่รู้จบตอนเปิดแอพ)", () => {
+    expect(
+      validateBackup({
+        ...valid,
+        recurring: [
+          {
+            type: "IN",
+            amount: 100,
+            pocketId: 1,
+            freq: "weekly",
+            day: 25,
+            since: "2026-06-01",
+            active: 1,
+            createdAt: 1,
+          },
+        ],
+      }),
+    ).toBe(false);
+  });
+});
+
 describe("downloadBackup (jsdom DOM path)", () => {
   let createObjSpy: ReturnType<typeof vi.fn>;
   let revokeObjSpy: ReturnType<typeof vi.fn>;
