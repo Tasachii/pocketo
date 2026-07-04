@@ -6,14 +6,21 @@ on:
   pull_request:
     branches: [main]
 
+# ยกเลิก run เก่าที่ยังค้างของ ref เดียวกันเมื่อ push ใหม่ (กันคิวสะสม)
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    # fail เร็วถ้าเทสต์ค้าง — ไม่ปล่อยชน 6 ชม. ตามเพดาน GitHub
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci
       - name: Lint
