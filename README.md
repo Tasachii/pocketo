@@ -1,6 +1,6 @@
 # Pocketo（ポケット）
 
-![unit tests](https://img.shields.io/badge/unit_tests-131_passing-2c6e34)
+![unit tests](https://img.shields.io/badge/unit_tests-153_passing-2c6e34)
 ![e2e](https://img.shields.io/badge/e2e_+_a11y-14_tests_%C3%97_chromium%2Bwebkit-2c6e34)
 ![PWA](https://img.shields.io/badge/PWA-offline-3e5c76)
 ![0 vulnerabilities](https://img.shields.io/badge/npm_audit-0_vulnerabilities-2c6e34)
@@ -8,7 +8,7 @@
 
 Pocketo is a kakeibo (家計簿) income-and-expense tracker that runs entirely in the browser — no server, no account, no tracking. Log a transaction in 3 taps; split income into purpose-driven money pockets automatically; estimate Thai personal income tax bracket by bracket. Data lives in IndexedDB and never leaves the device.
 
-**Live** — https://tasachii.github.io/Pocketo/ · **Repo** — https://github.com/Tasachii/pocketo · **Issues** — https://github.com/Tasachii/pocketo/issues
+**Live** — https://tasachii.github.io/Pocketo/ · **Repo** — https://github.com/Tasachii/Pocketo · **Issues** — https://github.com/Tasachii/Pocketo/issues
 
 ---
 
@@ -56,16 +56,16 @@ No build step needed — it is a web app. Open the URL, then install it to your 
 
 **Mac / Linux**
 ```bash
-git clone https://github.com/Tasachii/pocketo.git
-cd pocketo
+git clone https://github.com/Tasachii/Pocketo.git
+cd Pocketo
 npm install
 npm run dev        # → http://localhost:5173/
 ```
 
 **Windows**
 ```bat
-git clone https://github.com/Tasachii/pocketo.git
-cd pocketo
+git clone https://github.com/Tasachii/Pocketo.git
+cd Pocketo
 npm install
 npm run dev        :: → http://localhost:5173/
 ```
@@ -78,7 +78,7 @@ npm run dev        :: → http://localhost:5173/
 npm run dev           # start Vite dev server on :5173
 npm run build         # type-check (tsc --noEmit) + bundle to dist/
 npm run preview       # serve the production build at :4173/Pocketo/
-npm test              # unit tests (Vitest, 131 tests)
+npm test              # unit tests (Vitest, 153 tests)
 npm run test:coverage # unit tests + Istanbul coverage report
 npm run test:e2e      # e2e + a11y (Playwright on chromium + webkit; first run: npx playwright install chromium webkit)
 npm run lint          # ESLint --max-warnings 0
@@ -139,10 +139,10 @@ npm run og            # regenerate the Open Graph preview image
 
 | Layer | Tool | Count | Browsers |
 | --- | --- | --- | --- |
-| Unit (pure core + DB) | Vitest + fake-indexeddb | 131 tests | Node |
+| Unit (pure core + DB) | Vitest + fake-indexeddb | 153 tests | Node |
 | E2E + accessibility | Playwright + axe-core | 14 tests | Chromium + WebKit (mobile 390×844) |
 
-Coverage thresholds (Istanbul, CI-gated): lines ≥ 75%, branches ≥ 70%, functions ≥ 80%. Pure math modules (`src/core/{allocate,money,tax,recurring,crypto}.ts`) are held to lines ≥ 95%, functions 100%.
+Coverage thresholds (Istanbul, CI-gated): global floors are a ratchet set just below measured coverage (lines ≥ 42%, branches ≥ 32%, functions ≥ 25% — raised as UI-screen tests land). Pure math modules (`src/core/{allocate,money,tax,recurring,crypto}.ts`) are held to lines ≥ 95%, functions 100%.
 
 ---
 

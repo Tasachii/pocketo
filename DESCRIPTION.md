@@ -8,7 +8,7 @@
 
 - **Project Name:** Pocketo（ポケット）
 - **Live App:** https://tasachii.github.io/Pocketo/
-- **Repository:** https://github.com/Tasachii/pocketo
+- **Repository:** https://github.com/Tasachii/Pocketo
 
 **Brief Description**
 
