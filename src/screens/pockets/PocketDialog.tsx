@@ -96,7 +96,7 @@ export function PocketDialog({
   };
 
   return (
-    <Overlay onClose={onClose}>
+    <Overlay onClose={onClose} label={pocket ? t("pk_edit") : t("pk_new")}>
       <h2 className="pb-4 font-zen text-lg font-bold">
         {pocket ? t("pk_edit") : t("pk_new")}
       </h2>

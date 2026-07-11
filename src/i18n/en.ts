@@ -257,6 +257,9 @@ export const en: Dict = {
   rec_defaultName: "Recurring",
   rec_errAmount: "Enter a valid amount",
   rec_errPocket: "Choose a pocket",
+  storageUnavailable: "Local storage could not be opened. Your data is not ready yet.",
+  saveFailed: "Could not save. Try again or check your browser storage.",
+  retry: "Try again",
 
   // onboarding
   ob_start: "Get started",

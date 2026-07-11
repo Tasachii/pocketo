@@ -194,7 +194,7 @@ function RecurringDialog({
   };
 
   return (
-    <Overlay onClose={onClose}>
+    <Overlay onClose={onClose} label={rule ? t("rec_edit") : t("rec_new")}>
       <h2 className="pb-4 font-zen text-lg font-bold">
         {rule ? t("rec_edit") : t("rec_new")}
       </h2>

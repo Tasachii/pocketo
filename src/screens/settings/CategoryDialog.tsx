@@ -56,7 +56,7 @@ export function CategoryDialog({
   };
 
   return (
-    <Overlay onClose={onClose}>
+    <Overlay onClose={onClose} label={t("cat_edit")}>
       <h2 className="pb-4 font-zen text-lg font-bold">{t("cat_edit")}</h2>
       <div className="space-y-4">
         <div className="flex gap-2">

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { setLang, useT } from "../i18n";
 import type { Dict } from "../i18n";
 import { EnsoRing } from "./EnsoRing";
+import { useDialogFocus } from "./useDialogFocus";
 
 export const ONBOARDED_KEY = "pocketo-onboarded";
 
@@ -22,6 +23,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
   const [step, setStep] = useState(0);
   const last = step === CARDS.length - 1;
   const card = CARDS[step];
+  const dialogRef = useDialogFocus(true);
 
   const finish = () => {
     localStorage.setItem(ONBOARDED_KEY, "1");
@@ -29,7 +31,14 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
   };
 
   return (
-    <div className="fade fixed inset-0 z-[90] flex flex-col bg-bg">
+    <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label={t(card.titleKey)}
+      tabIndex={-1}
+      className="fade fixed inset-0 z-[90] flex flex-col bg-bg"
+    >
       <div
         className="mx-auto flex w-full max-w-md flex-1 flex-col px-7"
         style={{

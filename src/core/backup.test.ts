@@ -116,10 +116,10 @@ describe("validateBackup — ระเบียนเสียต้อง rejec
     app: "pocketo",
     schemaVersion: 2 as const,
     exportedAt: "2026-06-01T00:00:00.000Z",
-    pockets: [{ name: "หลัก", icon: "👛", isMain: 1, sortOrder: 0 }],
-    categories: [{ name: "อาหาร", icon: "🍜", type: "expense", sortOrder: 0 }],
+    pockets: [{ id: 1, name: "หลัก", icon: "👛", isMain: 1, sortOrder: 0 }],
+    categories: [{ id: 1, name: "อาหาร", icon: "🍜", type: "expense", sortOrder: 0 }],
     tx: [
-      { type: "OUT", amount: 100, pocketId: 1, date: "2026-06-01", createdAt: 1 },
+      { id: 1, type: "OUT", amount: 100, pocketId: 1, date: "2026-06-01", createdAt: 1 },
     ],
     recurring: [] as unknown[],
   };
@@ -132,7 +132,7 @@ describe("validateBackup — ระเบียนเสียต้อง rejec
     expect(
       validateBackup({
         ...valid,
-        tx: [{ type: "OUT", amount: "100", pocketId: 1, date: "2026-06-01", createdAt: 1 }],
+        tx: [{ id: 1, type: "OUT", amount: "100", pocketId: 1, date: "2026-06-01", createdAt: 1 }],
       }),
     ).toBe(false);
   });
@@ -141,7 +141,7 @@ describe("validateBackup — ระเบียนเสียต้อง rejec
     expect(
       validateBackup({
         ...valid,
-        tx: [{ type: "OUT", amount: 100, pocketId: 1, date: "2026-13-40", createdAt: 1 }],
+        tx: [{ id: 1, type: "OUT", amount: 100, pocketId: 1, date: "2026-13-40", createdAt: 1 }],
       }),
     ).toBe(false);
   });
@@ -150,7 +150,7 @@ describe("validateBackup — ระเบียนเสียต้อง rejec
     expect(
       validateBackup({
         ...valid,
-        pockets: [{ name: "x", icon: "💰", isMain: 0, sortOrder: 0, allocPercent: 150 }],
+        pockets: [{ id: 1, name: "x", icon: "💰", isMain: 0, sortOrder: 0, allocPercent: 150 }],
       }),
     ).toBe(false);
   });
@@ -161,6 +161,7 @@ describe("validateBackup — ระเบียนเสียต้อง rejec
         ...valid,
         recurring: [
           {
+            id: 1,
             type: "IN",
             amount: 100,
             pocketId: 1,
@@ -172,6 +173,56 @@ describe("validateBackup — ระเบียนเสียต้อง rejec
           },
         ],
       }),
+    ).toBe(false);
+  });
+
+  it.each(["2026-02-30", "2025-02-29", "2026-04-31"])(
+    "วันที่ %s ไม่มีจริง → false",
+    (date) => {
+      expect(validateBackup({ ...valid, tx: [{ ...valid.tx[0], date }] })).toBe(false);
+    },
+  );
+
+  it("ยอดติดลบ, id ซ้ำ/หาย และ foreign key กำพร้า → false", () => {
+    expect(validateBackup({ ...valid, tx: [{ ...valid.tx[0], amount: -100 }] })).toBe(false);
+    expect(
+      validateBackup({
+        ...valid,
+        pockets: [...valid.pockets, { ...valid.pockets[0], isMain: 0 }],
+      }),
+    ).toBe(false);
+    expect(validateBackup({ ...valid, tx: [{ ...valid.tx[0], id: undefined }] })).toBe(false);
+    expect(validateBackup({ ...valid, tx: [{ ...valid.tx[0], pocketId: 999 }] })).toBe(false);
+  });
+
+  it("ต้องมี main pocket เดียว และ allocation รวมต้องไม่เกิน 100", () => {
+    expect(validateBackup({ ...valid, pockets: [{ ...valid.pockets[0], isMain: 0 }] })).toBe(false);
+    expect(
+      validateBackup({
+        ...valid,
+        pockets: [
+          valid.pockets[0],
+          { id: 2, name: "ออม", icon: "🏦", isMain: 0, sortOrder: 1, allocPercent: 60 },
+          { id: 3, name: "เที่ยว", icon: "✈️", isMain: 0, sortOrder: 2, allocPercent: 50 },
+        ],
+      }),
+    ).toBe(false);
+  });
+
+  it("TRANSFER และ category type ต้องรักษา referential invariant", () => {
+    const twoPockets = [
+      valid.pockets[0],
+      { id: 2, name: "ออม", icon: "🏦", isMain: 0 as const, sortOrder: 1 },
+    ];
+    expect(
+      validateBackup({
+        ...valid,
+        pockets: twoPockets,
+        tx: [{ ...valid.tx[0], type: "TRANSFER", toPocketId: 999, categoryId: undefined }],
+      }),
+    ).toBe(false);
+    expect(
+      validateBackup({ ...valid, tx: [{ ...valid.tx[0], type: "IN", categoryId: 1 }] }),
     ).toBe(false);
   });
 });

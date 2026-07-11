@@ -5,6 +5,7 @@ import { BACKSPACE, pressKey } from "../core/quickadd";
 import type { Category, Pocket } from "../core/types";
 import { saveQuickTx, todayStr } from "../db/data";
 import { IconBack, IconClose } from "./Icons";
+import { useDialogFocus } from "./useDialogFocus";
 
 type TxDir = "OUT" | "IN";
 type Step = "amount" | "category";
@@ -34,6 +35,8 @@ export function QuickAdd({
   const [note, setNote] = useState("");
   const [date, setDate] = useState(todayStr());
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(false);
+  const dialogRef = useDialogFocus(open, onClose);
 
   useEffect(() => {
     if (open) {
@@ -44,6 +47,7 @@ export function QuickAdd({
       setNote("");
       setDate(todayStr());
       setSaving(false);
+      setSaveError(false);
     }
     // เปิดใหม่ทุกครั้งเริ่มจากศูนย์ — main?.id เปลี่ยนเฉพาะตอน seed ครั้งแรก
   }, [open]);
@@ -67,21 +71,33 @@ export function QuickAdd({
   const save = async (categoryId: number) => {
     if (!valid || pocketId == null || saving) return;
     setSaving(true);
-    await saveQuickTx({
-      type: dir,
-      amount: amount!,
-      pocketId,
-      categoryId,
-      note: note.trim() || undefined,
-      date,
-    });
-    onSaved();
-    setTimeout(onClose, 650);
+    setSaveError(false);
+    try {
+      await saveQuickTx({
+        type: dir,
+        amount: amount!,
+        pocketId,
+        categoryId,
+        note: note.trim() || undefined,
+        date,
+      });
+      onSaved();
+      setTimeout(onClose, 650);
+    } catch {
+      setSaveError(true);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <div className="fade fixed inset-0 z-50 bg-bg">
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("aria_addNew")}
+        tabIndex={-1}
         className="sheet mx-auto flex h-full max-w-md flex-col px-5"
         style={{
           paddingTop: "max(env(safe-area-inset-top), 16px)",
@@ -158,6 +174,11 @@ export function QuickAdd({
             <p className="pb-3 pt-1 text-center text-sm text-sub">
               {t("qa_tapToSave")}
             </p>
+            {saveError && (
+              <p role="alert" className="pb-3 text-center text-sm text-expense">
+                {t("saveFailed")}
+              </p>
+            )}
             <div className="grid flex-1 grid-cols-4 content-start gap-2 overflow-y-auto">
               {cats.map((c) => (
                 <button

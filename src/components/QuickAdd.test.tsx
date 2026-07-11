@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { Category, Pocket } from "../core/types";
 
 // mock ชั้น data: saveQuickTx เป็น spy, todayStr คงที่ ให้ assert payload ได้
@@ -52,6 +52,14 @@ afterEach(() => {
 });
 
 describe("QuickAdd — แป้นและสถานะ", () => {
+  it("เป็น keyboard-modal และ Escape ปิดได้", () => {
+    renderQA();
+    const dialog = screen.getByRole("dialog", { name: "จดรายการใหม่" });
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
   it("ปุ่มถัดไป disabled ตอนยังไม่มีจำนวน, enabled เมื่อกรอกถูก", () => {
     renderQA();
     expect(nextBtn()).toBeDisabled();
@@ -112,6 +120,24 @@ describe("QuickAdd — แป้นและสถานะ", () => {
     fireEvent.click(cat);
     fireEvent.click(cat);
     expect(saveQuickTxMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("บันทึกล้มเหลว → แจ้งผู้ใช้และปลด saving ให้ลองใหม่ได้", async () => {
+    saveQuickTxMock.mockRejectedValueOnce(new Error("quota"));
+    renderQA();
+    fireEvent.click(key("5"));
+    fireEvent.click(nextBtn());
+    fireEvent.click(screen.getByText("อาหาร"));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent("บันทึกไม่สำเร็จ");
+    fireEvent.click(screen.getByText("อาหาร"));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(saveQuickTxMock).toHaveBeenCalledTimes(2);
+    expect(onSaved).toHaveBeenCalledOnce();
   });
 
   it("ปิดแล้วเปิดใหม่ → ล้างจำนวน/step (reset on reopen)", () => {

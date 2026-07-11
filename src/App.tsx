@@ -22,11 +22,21 @@ export default function App() {
   const [tab, setTab] = useState<TabId>("home");
   const [quickOpen, setQuickOpen] = useState(false);
   const [stamp, setStamp] = useState(false);
+  const [startupError, setStartupError] = useState(false);
+  const [startupAttempt, setStartupAttempt] = useState(0);
 
   useEffect(() => {
     // สร้างรายการประจำที่ครบกำหนดทันทีที่เปิดแอพ (ตามเก็บเดือนที่พลาดด้วย)
-    void seedIfEmpty().then(() => applyDueRecurring());
-  }, []);
+    let active = true;
+    void seedIfEmpty()
+      .then(() => applyDueRecurring())
+      .catch(() => {
+        if (active) setStartupError(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [startupAttempt]);
 
   const pockets =
     useLiveQuery(() => db.pockets.orderBy("sortOrder").toArray(), []) ?? [];
@@ -49,6 +59,24 @@ export default function App() {
       className="mx-auto min-h-screen max-w-md px-5 pb-32"
       style={{ paddingTop: "max(env(safe-area-inset-top), 12px)" }}
     >
+      {startupError && (
+        <div
+          role="alert"
+          className="mb-3 rounded-2xl border border-expense/30 bg-surface p-4 text-sm"
+        >
+          <p>{t("storageUnavailable")}</p>
+          <button
+            type="button"
+            onClick={() => {
+              setStartupError(false);
+              setStartupAttempt((n) => n + 1);
+            }}
+            className="pressable mt-2 font-medium text-accent"
+          >
+            {t("retry")}
+          </button>
+        </div>
+      )}
       {tab === "home" && <Home themeMode={mode} onCycleTheme={cycle} />}
       {tab === "pockets" && <Pockets />}
       {tab === "reports" && <Reports />}

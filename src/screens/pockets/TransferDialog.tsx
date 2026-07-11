@@ -34,7 +34,7 @@ export function TransferDialog({
   const selectCls = inputCls + " appearance-none";
 
   return (
-    <Overlay onClose={onClose}>
+    <Overlay onClose={onClose} label={t("tf_title")}>
       <h2 className="pb-4 font-zen text-lg font-bold">{t("tf_title")}</h2>
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-3">

@@ -59,7 +59,7 @@ export function TxEditor({
   };
 
   return (
-    <Overlay onClose={onClose}>
+    <Overlay onClose={onClose} label={t("te_edit", { type: t(`type_${tx.type}`) })}>
       <h2 className="pb-4 font-zen text-lg font-bold">
         {t("te_edit", { type: t(`type_${tx.type}`) })}
       </h2>

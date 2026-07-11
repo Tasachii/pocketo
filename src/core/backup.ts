@@ -57,6 +57,10 @@ export async function downloadBackup(
 
 const isNum = (v: unknown): v is number =>
   typeof v === "number" && Number.isFinite(v);
+const isSafeInt = (v: unknown): v is number =>
+  isNum(v) && Number.isSafeInteger(v);
+const isPositiveInt = (v: unknown): v is number => isSafeInt(v) && v > 0;
+const isTimestamp = (v: unknown): v is number => isSafeInt(v) && v >= 0;
 const isStr = (v: unknown): v is string => typeof v === "string";
 const isObj = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null;
@@ -64,7 +68,8 @@ const isObj = (v: unknown): v is Record<string, unknown> =>
 /** YYYY-MM-DD ที่ parse เป็นวันจริงได้ — วันเสียทำให้ engine รายการประจำวนไม่รู้จบ */
 function isISODate(v: unknown): v is string {
   if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
-  return !Number.isNaN(new Date(`${v}T00:00:00`).getTime());
+  const date = new Date(`${v}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === v;
 }
 
 const TX_TYPES = new Set(["IN", "OUT", "TRANSFER", "INIT"]);
@@ -73,21 +78,28 @@ const FREQS = new Set(["monthly", "weekly", "yearly"]);
 function isValidTx(v: unknown): boolean {
   return (
     isObj(v) &&
+    isPositiveInt(v.id) &&
     TX_TYPES.has(v.type as string) &&
-    isNum(v.amount) &&
-    isNum(v.pocketId) &&
+    isPositiveInt(v.amount) &&
+    isPositiveInt(v.pocketId) &&
+    (v.toPocketId === undefined || isPositiveInt(v.toPocketId)) &&
+    (v.categoryId === undefined || isPositiveInt(v.categoryId)) &&
+    (v.parentId === undefined || isPositiveInt(v.parentId)) &&
     isISODate(v.date) &&
-    isNum(v.createdAt)
+    isTimestamp(v.createdAt)
   );
 }
 
 function isValidPocket(v: unknown): boolean {
   return (
     isObj(v) &&
+    isPositiveInt(v.id) &&
     isStr(v.name) &&
+    v.name.trim().length > 0 &&
     isStr(v.icon) &&
     (v.isMain === 0 || v.isMain === 1) &&
-    isNum(v.sortOrder) &&
+    isSafeInt(v.sortOrder) &&
+    (v.goal === undefined || isPositiveInt(v.goal)) &&
     (v.allocPercent === undefined ||
       (isNum(v.allocPercent) && v.allocPercent >= 0 && v.allocPercent <= 100))
   );
@@ -96,10 +108,13 @@ function isValidPocket(v: unknown): boolean {
 function isValidCategory(v: unknown): boolean {
   return (
     isObj(v) &&
+    isPositiveInt(v.id) &&
     isStr(v.name) &&
+    v.name.trim().length > 0 &&
     isStr(v.icon) &&
     (v.type === "income" || v.type === "expense") &&
-    isNum(v.sortOrder)
+    isSafeInt(v.sortOrder) &&
+    (v.budget === undefined || isPositiveInt(v.budget))
   );
 }
 
@@ -111,14 +126,97 @@ function isValidRecurring(v: unknown): boolean {
   if (freq === "weekly" && (!Number.isInteger(v.day) || v.day < 0 || v.day > 6))
     return false;
   return (
+    isPositiveInt(v.id) &&
     (v.type === "IN" || v.type === "OUT") &&
-    isNum(v.amount) &&
-    isNum(v.pocketId) &&
+    isPositiveInt(v.amount) &&
+    isPositiveInt(v.pocketId) &&
+    (v.categoryId === undefined || isPositiveInt(v.categoryId)) &&
     isISODate(v.since) &&
     (v.lastPosted === undefined || isISODate(v.lastPosted)) &&
     (v.active === 0 || v.active === 1) &&
-    isNum(v.createdAt)
+    isTimestamp(v.createdAt) &&
+    (freq !== "monthly" || (Number.isInteger(v.day) && v.day >= 1 && v.day <= 31)) &&
+    (freq !== "yearly" ||
+      (Number.isInteger(v.day) &&
+        v.day >= 1 &&
+        v.day <= 31 &&
+        Number.isInteger(v.month) &&
+        (v.month as number) >= 1 &&
+        (v.month as number) <= 12))
   );
+}
+
+function hasUniqueIds(rows: Array<{ id?: number }>): boolean {
+  const ids = rows.map((row) => row.id);
+  return ids.every(isPositiveInt) && new Set(ids).size === ids.length;
+}
+
+function hasSemanticIntegrity(data: BackupFile): boolean {
+  if (
+    !hasUniqueIds(data.pockets) ||
+    !hasUniqueIds(data.categories) ||
+    !hasUniqueIds(data.tx) ||
+    !hasUniqueIds(data.recurring ?? []) ||
+    data.pockets.filter((pocket) => pocket.isMain === 1).length !== 1
+  ) {
+    return false;
+  }
+
+  const pocketIds = new Set(data.pockets.map((pocket) => pocket.id!));
+  const categories = new Map(data.categories.map((category) => [category.id!, category]));
+  const txById = new Map(data.tx.map((tx) => [tx.id!, tx]));
+  const allocationTotal = data.pockets
+    .filter((pocket) => pocket.isMain === 0)
+    .reduce((sum, pocket) => sum + (pocket.allocPercent ?? 0), 0);
+  if (allocationTotal > 100) return false;
+
+  for (const tx of data.tx) {
+    if (!pocketIds.has(tx.pocketId)) return false;
+    if (tx.type === "TRANSFER") {
+      if (
+        !tx.toPocketId ||
+        !pocketIds.has(tx.toPocketId) ||
+        tx.toPocketId === tx.pocketId ||
+        tx.categoryId !== undefined
+      ) {
+        return false;
+      }
+    } else if (tx.toPocketId !== undefined) {
+      return false;
+    }
+
+    if (tx.categoryId !== undefined) {
+      const category = categories.get(tx.categoryId);
+      if (
+        !category ||
+        (tx.type === "IN" && category.type !== "income") ||
+        (tx.type === "OUT" && category.type !== "expense") ||
+        (tx.type !== "IN" && tx.type !== "OUT")
+      ) {
+        return false;
+      }
+    }
+
+    if (tx.parentId !== undefined) {
+      const parent = txById.get(tx.parentId);
+      if (tx.type !== "TRANSFER" || !parent || parent.type !== "IN") return false;
+    }
+  }
+
+  for (const recurring of data.recurring ?? []) {
+    if (!pocketIds.has(recurring.pocketId)) return false;
+    if (recurring.categoryId !== undefined) {
+      const category = categories.get(recurring.categoryId);
+      if (
+        !category ||
+        (recurring.type === "IN" && category.type !== "income") ||
+        (recurring.type === "OUT" && category.type !== "expense")
+      ) {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 export function validateBackup(data: unknown): data is BackupFile {
@@ -135,12 +233,12 @@ export function validateBackup(data: unknown): data is BackupFile {
     return false;
   }
   // ตรวจรูปทุกระเบียน — ไฟล์เสีย/แก้มือต้อง fail สะอาด ไม่ใช่ทำแอพค้างหรือยอดเพี้ยน
-  return (
+  const structurallyValid =
     d.pockets.every(isValidPocket) &&
     d.categories.every(isValidCategory) &&
     d.tx.every(isValidTx) &&
-    (d.recurring === undefined || d.recurring.every(isValidRecurring))
-  );
+    (d.recurring === undefined || d.recurring.every(isValidRecurring));
+  return structurallyValid && hasSemanticIntegrity(d as unknown as BackupFile);
 }
 
 /** แทนที่ข้อมูลทั้งหมดด้วย backup (atomic — ล้มเหลวคือ rollback ทั้งก้อน) */
