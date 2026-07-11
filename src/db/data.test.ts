@@ -239,6 +239,31 @@ describe("seedIfEmpty — มีข้อมูลอยู่แล้วแต
     expect(pockets.filter((p) => p.isMain)).toHaveLength(1);
     expect(pockets.find((p) => p.isMain)?.name).toBe("A");
   });
+
+  it("seeded DB ที่ผู้ใช้ลบทุกกล่องแล้ว → ไม่สร้างกล่องกลับมาเอง", async () => {
+    const dbx = new PocketoDB(`seed-repair-empty-${++n}`);
+    await dbx.kv.put({ key: "seeded", value: 1 });
+
+    await seedIfEmpty(dbx);
+
+    expect(await dbx.pockets.count()).toBe(0);
+    expect(await dbx.categories.count()).toBe(0);
+  });
+
+  it("main หลายกล่องที่ sortOrder เท่ากัน → ใช้ id เป็น tie-breaker อย่าง deterministic", async () => {
+    const dbx = new PocketoDB(`seed-repair-tie-${++n}`);
+    await dbx.pockets.bulkAdd([
+      { name: "เพิ่มก่อน", icon: "1️⃣", isMain: 1, sortOrder: 1 },
+      { name: "เพิ่มทีหลัง", icon: "2️⃣", isMain: 1, sortOrder: 1 },
+    ] as Pocket[]);
+    await dbx.kv.put({ key: "seeded", value: 1 });
+
+    await seedIfEmpty(dbx);
+
+    const pockets = await dbx.pockets.toArray();
+    expect(pockets.filter((p) => p.isMain)).toHaveLength(1);
+    expect(pockets.find((p) => p.isMain)?.name).toBe("เพิ่มก่อน");
+  });
 });
 
 describe("saveQuickTx — auto-allocation guards", () => {
