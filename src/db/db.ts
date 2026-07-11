@@ -60,19 +60,34 @@ export const DEFAULT_CATEGORIES: Omit<Category, "id">[] = [
 
 /** seed ครั้งแรกเท่านั้น — ผู้ใช้ลบ/แก้ของตัวเองได้โดยไม่ถูก seed ทับ */
 export async function seedIfEmpty(database: PocketoDB = db): Promise<void> {
-  const seeded = await database.kv.get("seeded");
-  if (seeded) return;
   await database.transaction(
     "rw",
     [database.pockets, database.categories, database.kv],
     async () => {
-      if ((await database.pockets.count()) === 0) {
-        await database.pockets.add(DEFAULT_POCKET as Pocket);
+      const seeded = await database.kv.get("seeded");
+      if (!seeded) {
+        if ((await database.pockets.count()) === 0) {
+          await database.pockets.add(DEFAULT_POCKET as Pocket);
+        }
+        if ((await database.categories.count()) === 0) {
+          await database.categories.bulkAdd(DEFAULT_CATEGORIES as Category[]);
+        }
+        await database.kv.put({ key: "seeded", value: 1 });
       }
-      if ((await database.categories.count()) === 0) {
-        await database.categories.bulkAdd(DEFAULT_CATEGORIES as Category[]);
+
+      // Legacy/corrupt data can have no main pocket (or more than one). Repair it at boot
+      // under the same write lock, without re-seeding user-deleted pockets/categories.
+      const pockets = (await database.pockets.toArray()).sort(
+        (a, b) => a.sortOrder - b.sortOrder || (a.id ?? 0) - (b.id ?? 0),
+      );
+      if (pockets.length === 0) return;
+      const winner = pockets.find((pocket) => pocket.isMain === 1) ?? pockets[0];
+      for (const pocket of pockets) {
+        const isMain = pocket.id === winner.id ? 1 : 0;
+        if (pocket.isMain !== isMain) {
+          await database.pockets.update(pocket.id!, { isMain });
+        }
       }
-      await database.kv.put({ key: "seeded", value: 1 });
     },
   );
 }

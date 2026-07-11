@@ -67,6 +67,22 @@ describe("QuickAdd — แป้นและสถานะ", () => {
     expect(nextBtn()).toBeEnabled();
   });
 
+  it("ไม่มี main pocket → แจ้งวิธีกู้คืนและปิด flow ก่อนบันทึก", () => {
+    render(
+      <QuickAdd
+        open
+        categories={categories}
+        pockets={[]}
+        onClose={onClose}
+        onSaved={onSaved}
+      />,
+    );
+    fireEvent.click(key("5"));
+    expect(nextBtn()).toBeDisabled();
+    expect(screen.getByRole("alert")).toHaveTextContent("ยังไม่มีกล่องหลัก");
+    expect(saveQuickTxMock).not.toHaveBeenCalled();
+  });
+
   it("กด 0 ตัวแรกไม่ขึ้น แล้ว 5 → แสดง 5 (wiring pressKey)", () => {
     renderQA();
     fireEvent.click(key("0"));

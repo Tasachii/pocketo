@@ -208,6 +208,37 @@ describe("seedIfEmpty — มีข้อมูลอยู่แล้วแต
     expect(await dbx.categories.count()).toBe(1);
     expect((await dbx.kv.get("seeded"))?.value).toBe(1);
   });
+
+  it("seeded DB ที่มีกล่องแต่ไม่มี main → promote กล่องแรกตาม sortOrder โดยไม่ seed ทับ", async () => {
+    const dbx = new PocketoDB(`seed-repair-none-${++n}`);
+    await dbx.pockets.bulkAdd([
+      { name: "ที่สอง", icon: "2️⃣", isMain: 0, sortOrder: 2 },
+      { name: "ที่หนึ่ง", icon: "1️⃣", isMain: 0, sortOrder: 1 },
+    ] as Pocket[]);
+    await dbx.kv.put({ key: "seeded", value: 1 });
+
+    await seedIfEmpty(dbx);
+
+    const pockets = await dbx.pockets.orderBy("sortOrder").toArray();
+    expect(pockets).toHaveLength(2);
+    expect(pockets.filter((p) => p.isMain)).toHaveLength(1);
+    expect(pockets.find((p) => p.isMain)?.name).toBe("ที่หนึ่ง");
+  });
+
+  it("ข้อมูลเสียที่มี main หลายกล่อง → เหลือ main เดียวอย่าง deterministic", async () => {
+    const dbx = new PocketoDB(`seed-repair-many-${++n}`);
+    await dbx.pockets.bulkAdd([
+      { name: "B", icon: "B", isMain: 1, sortOrder: 5 },
+      { name: "A", icon: "A", isMain: 1, sortOrder: 1 },
+    ] as Pocket[]);
+    await dbx.kv.put({ key: "seeded", value: 1 });
+
+    await seedIfEmpty(dbx);
+
+    const pockets = await dbx.pockets.toArray();
+    expect(pockets.filter((p) => p.isMain)).toHaveLength(1);
+    expect(pockets.find((p) => p.isMain)?.name).toBe("A");
+  });
 });
 
 describe("saveQuickTx — auto-allocation guards", () => {

@@ -1,7 +1,7 @@
 import { splitByPercent } from "../core/allocate";
 import { dueDates } from "../core/recurring";
 import type { Pocket, Satang, Tx } from "../core/types";
-import { db } from "./db";
+import { db, type PocketoDB } from "./db";
 
 export function todayStr(): string {
   return new Date().toLocaleDateString("en-CA");
@@ -45,21 +45,36 @@ export interface QuickTxInput {
  */
 export async function saveQuickTx(input: QuickTxInput): Promise<void> {
   await db.transaction("rw", [db.tx, db.pockets], async () => {
-    const createdAt = Date.now();
-    const id = (await db.tx.add({ ...input, createdAt })) as number;
-    if (input.type !== "IN") return;
-    await createAutoAllocations(id, input.amount, input.pocketId, input.date);
+    await saveQuickTxInTransaction(db, input);
   });
+}
+
+/** Caller must already hold a write transaction covering tx + pockets. */
+async function saveQuickTxInTransaction(
+  database: PocketoDB,
+  input: QuickTxInput,
+): Promise<void> {
+  const createdAt = Date.now();
+  const id = (await database.tx.add({ ...input, createdAt })) as number;
+  if (input.type !== "IN") return;
+  await createAutoAllocations(
+    database,
+    id,
+    input.amount,
+    input.pocketId,
+    input.date,
+  );
 }
 
 /** สร้าง TRANSFER แบ่งอัตโนมัติ (ผูก parentId กลับไปที่รายรับ เพื่อลบ/แก้เป็นชุดได้) */
 async function createAutoAllocations(
+  database: PocketoDB,
   parentId: number,
   amount: Satang,
   pocketId: number,
   date: string,
 ): Promise<void> {
-  const pockets = await db.pockets.toArray();
+  const pockets = await database.pockets.toArray();
   const main = pockets.find((p) => p.isMain);
   if (!main || pocketId !== main.id) return;
   const rules = pockets
@@ -71,7 +86,7 @@ async function createAutoAllocations(
   if (rules.reduce((s, r) => s + r.percent, 0) > 100) return;
   const createdAt = Date.now();
   for (const a of splitByPercent(amount, rules)) {
-    await db.tx.add({
+    await database.tx.add({
       type: "TRANSFER",
       amount: a.amount,
       pocketId: main.id!,
@@ -135,7 +150,13 @@ export async function updateTx(id: number, patch: TxPatch): Promise<void> {
       next.pocketId !== t.pocketId
     ) {
       await db.tx.bulkDelete(children.map((c) => c.id!));
-      await createAutoAllocations(id, next.amount, next.pocketId, next.date);
+      await createAutoAllocations(
+        db,
+        id,
+        next.amount,
+        next.pocketId,
+        next.date,
+      );
     }
   });
 }
@@ -147,27 +168,43 @@ export async function updateTx(id: number, patch: TxPatch): Promise<void> {
 export async function applyDueRecurring(
   today: string = todayStr(),
 ): Promise<number> {
-  const rules = await db.recurring.where("active").equals(1).toArray();
-  let posted = 0;
-  for (const r of rules) {
-    const dates = dueDates(r, today);
-    if (dates.length === 0) continue;
-    await db.transaction("rw", [db.tx, db.pockets, db.recurring], async () => {
-      for (const date of dates) {
-        await saveQuickTx({
-          type: r.type,
-          amount: r.amount,
-          pocketId: r.pocketId,
-          categoryId: r.categoryId,
-          note: r.note || undefined, // ไม่มี note ของผู้ใช้ → แสดง fallback เป็นชื่อหมวด
-          date,
+  return applyDueRecurringForDb(db, today);
+}
+
+/** Exported for deterministic same-origin multi-tab regression tests. */
+export async function applyDueRecurringForDb(
+  database: PocketoDB,
+  today: string,
+): Promise<number> {
+  return database.transaction(
+    "rw",
+    [database.tx, database.pockets, database.recurring],
+    async () => {
+      // The active-rule read and due-date calculation happen only after acquiring the
+      // IndexedDB write transaction. A second tab therefore observes updated lastPosted.
+      const rules = await database.recurring.where("active").equals(1).toArray();
+      let posted = 0;
+      for (const r of rules) {
+        const dates = dueDates(r, today);
+        if (dates.length === 0) continue;
+        for (const date of dates) {
+          await saveQuickTxInTransaction(database, {
+            type: r.type,
+            amount: r.amount,
+            pocketId: r.pocketId,
+            categoryId: r.categoryId,
+            note: r.note || undefined, // ไม่มี note ของผู้ใช้ → แสดง fallback เป็นชื่อหมวด
+            date,
+          });
+        }
+        await database.recurring.update(r.id!, {
+          lastPosted: dates[dates.length - 1],
         });
+        posted += dates.length;
       }
-      await db.recurring.update(r.id!, { lastPosted: dates[dates.length - 1] });
-    });
-    posted += dates.length;
-  }
-  return posted;
+      return posted;
+    },
+  );
 }
 
 export async function transfer(

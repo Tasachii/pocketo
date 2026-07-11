@@ -53,7 +53,9 @@ export function QuickAdd({
   }, [open]);
 
   const amount = parseAmount(amountStr || "0");
-  const valid = amount !== null && amount > 0;
+  const amountValid = amount !== null && amount > 0;
+  const missingMainPocket = main?.id == null;
+  const valid = amountValid && pocketId != null && !missingMainPocket;
   const cats = useMemo(
     () =>
       categories
@@ -69,7 +71,11 @@ export function QuickAdd({
   };
 
   const save = async (categoryId: number) => {
-    if (!valid || pocketId == null || saving) return;
+    if (!amountValid || saving) return;
+    if (pocketId == null || missingMainPocket) {
+      setSaveError(true);
+      return;
+    }
     setSaving(true);
     setSaveError(false);
     try {
@@ -146,6 +152,12 @@ export function QuickAdd({
           </div>
           <div className="mt-2 h-px w-24" style={{ background: "var(--line)" }} />
         </div>
+
+        {missingMainPocket && (
+          <p role="alert" className="pb-3 text-center text-sm text-expense">
+            {t("qa_noMainPocket")}
+          </p>
+        )}
 
         {step === "amount" ? (
           <>

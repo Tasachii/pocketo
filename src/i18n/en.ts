@@ -259,6 +259,8 @@ export const en: Dict = {
   rec_errPocket: "Choose a pocket",
   storageUnavailable: "Local storage could not be opened. Your data is not ready yet.",
   saveFailed: "Could not save. Try again or check your browser storage.",
+  qa_noMainPocket:
+    "There is no main pocket yet. Close this screen and open Pockets to create one first.",
   retry: "Try again",
 
   // onboarding
